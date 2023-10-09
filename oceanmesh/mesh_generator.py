@@ -701,9 +701,8 @@ def _stereo_distortion(lat):
     ll = lat + lat0
     lrad = ll / 180 * np.pi
     res = np.sin(lrad) / (1 - np.cos(lrad))
-    # taking derivative for lats close to the north pole
-    res[lat > 89] = 2 / (1 - np.cos(lrad[lat > 89])) ** 2 / 180 * np.pi
-    #
+    # changing function for lats close to the north pole
+    res[lat > 0] = 1 / (1 - 0.5 * np.cos(lrad[lat > 0]) ** 2)
     return res
 
 
