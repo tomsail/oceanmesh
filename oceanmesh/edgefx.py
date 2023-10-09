@@ -156,7 +156,7 @@ def enforce_mesh_gradation(grid, gradation=0.15, crs="EPSG:4326", stereo=False):
         grid_stereo.build_interpolant()
         # reinject back into the original grid and redo the gradient computation
         xg, yg = grid.create_grid()
-        tmp[yg>0] = grid_stereo.eval(to_stereo(-xg[yg>0], yg[yg>0]))
+        tmp[yg > 0] = grid_stereo.eval(to_stereo(-xg[yg > 0], yg[yg > 0]))
         logger.info(
             f"Global mesh: reinject back stereographic gradient and recomputing gradient..."
         )
