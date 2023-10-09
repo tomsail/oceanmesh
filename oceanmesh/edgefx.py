@@ -7,15 +7,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.spatial
 import skfmm
-from _HamiltonJacobi import gradient_limit
 from inpoly import inpoly2
 from shapely.geometry import LineString
 from skimage.morphology import medial_axis
 
+from _HamiltonJacobi import gradient_limit
 from oceanmesh.filterfx import filt2
 
 from . import edges
 from .grid import Grid
+from .region import to_lat_lon, to_stereo
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +88,7 @@ def enforce_mesh_size_bounds_elevation(grid, dem, bounds):
     return grid
 
 
-def enforce_mesh_gradation(grid, gradation=0.15, crs="EPSG:4326"):
+def enforce_mesh_gradation(grid, gradation=0.15, crs="EPSG:4326", stereo=False):
     """Enforce a mesh size gradation bound `gradation` on a :class:`grid`
 
     Parameters
@@ -122,6 +123,55 @@ def enforce_mesh_gradation(grid, gradation=0.15, crs="EPSG:4326"):
     cell_size = cell_size.flatten("F")
     tmp = gradient_limit([*sz], elen, gradation, 10000, cell_size)
     tmp = np.reshape(tmp, (sz[0], sz[1]), "F")
+    if stereo:
+        logger.info(f"Global mesh: fixing gradient on the north pole...")
+        # max distortion at the pole: 2 / 180 * PI / (1 - cos(lat))**2
+        dx_stereo = grid.dx * 1 / 180 * np.pi / 2
+        hmin_stereo = grid.hmin * 1 / 180 * np.pi / 2
+        # in stereo projection, all north hemisphere is contained in the unit sphere
+        # we want to fix the gradient close to the north pole,
+        # so we extract all the coordinates between -1 and 1 in stereographic projection
+
+        us, vs = np.meshgrid(
+            np.arange(-1, 1, dx_stereo), np.arange(-1, 1, dx_stereo), indexing="ij"
+        )
+        ulon, vlat = to_lat_lon(us.ravel(), vs.ravel())
+        utmp = grid.eval((ulon, vlat))
+        utmp = np.reshape(utmp, us.shape)
+        szs = utmp.shape
+        szs = (szs[0], szs[1], 1)
+        #  we choose an excessively large number for the gradiation = 5
+        # this is merely to fix the north pole gradient
+        vtmp = gradient_limit([*szs], dx_stereo, 5, 10000, utmp.flatten("F"))
+        vtmp = np.reshape(vtmp, (szs[0], szs[1]), "F")
+        # construct stereo interpolating function
+        grid_stereo = Grid(
+            bbox=(-1, 1, -1, 1),
+            dx=dx_stereo,
+            values=vtmp,
+            hmin=grid.hmin,
+            extrapolate=grid.extrapolate,
+            crs=crs,
+        )
+        grid_stereo.build_interpolant()
+        # reinject back into the original grid and redo the gradient computation
+        xv, yv = grid.create_vectors()
+        xg, yg = grid.create_grid()
+        ug, vg = to_stereo(xg, yg)
+        for iu, u in enumerate(xv):
+            for iv, v in enumerate(yv):
+                if v < 0:
+                    pass
+                else:
+                    tmp[iu, iv] = grid_stereo.eval(to_stereo(-u, v))
+        #
+        logger.info(
+            f"Global mesh: reinject back stereographic gradient and recomputing gradient..."
+        )
+        cell_size = tmp.flatten("F")
+        tmp = gradient_limit([*sz], elen, gradation, 10000, cell_size)
+        tmp = np.reshape(tmp, (sz[0], sz[1]), "F")
+
     grid_limited = Grid(
         bbox=grid.bbox,
         dx=grid.dx,

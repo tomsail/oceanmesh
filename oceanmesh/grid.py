@@ -3,10 +3,10 @@ import logging
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.spatial
-from scipy.interpolate import RegularGridInterpolator
+from scipy.interpolate import LinearNDInterpolator, RegularGridInterpolator
 
 from .idw import Invdisttree
-from .region import Region
+from .region import Region, to_stereo
 
 logger = logging.getLogger(__name__)
 
@@ -346,6 +346,7 @@ class Grid(Region):
         holding=False,
         coarsen=1,
         plot_colorbar=False,
+        stereo=False,
         **kwargs,
     ):
         """Visualize the values in :obj:`Grid`
@@ -363,6 +364,8 @@ class Grid(Region):
 
         """
         _xg, _yg = self.create_grid()
+        if stereo:
+            _xg, _yg = to_stereo(_xg, _yg)
         fig, ax = plt.subplots()
         ax.axis("equal")
         pc = ax.pcolor(
@@ -392,6 +395,10 @@ class Grid(Region):
             _FILL = None
         else:
             _FILL = 999999
+
+        # for global mesh make it cyclical (from MatLab)
+        if (abs(self.bbox[0]) == 180) & (abs(self.bbox[1]) == 180):
+            self.values[[0, -1], :] = self.values[[-1, 0], :]
 
         fp = RegularGridInterpolator(
             (lon1, lat1),
