@@ -140,9 +140,9 @@ def enforce_mesh_gradation(grid, gradation=0.15, crs="EPSG:4326", stereo=False):
         utmp = np.reshape(utmp, us.shape)
         szs = utmp.shape
         szs = (szs[0], szs[1], 1)
-        #  we choose an excessively large number for the gradiation = 5
+        #  we choose an excessively large number for the gradiation = 10
         # this is merely to fix the north pole gradient
-        vtmp = gradient_limit([*szs], dx_stereo, 5, 10000, utmp.flatten("F"))
+        vtmp = gradient_limit([*szs], dx_stereo, 10, 10000, utmp.flatten("F"))
         vtmp = np.reshape(vtmp, (szs[0], szs[1]), "F")
         # construct stereo interpolating function
         grid_stereo = Grid(
@@ -155,16 +155,8 @@ def enforce_mesh_gradation(grid, gradation=0.15, crs="EPSG:4326", stereo=False):
         )
         grid_stereo.build_interpolant()
         # reinject back into the original grid and redo the gradient computation
-        xv, yv = grid.create_vectors()
         xg, yg = grid.create_grid()
-        ug, vg = to_stereo(xg, yg)
-        for iu, u in enumerate(xv):
-            for iv, v in enumerate(yv):
-                if v < 0:
-                    pass
-                else:
-                    tmp[iu, iv] = grid_stereo.eval(to_stereo(-u, v))
-        #
+        tmp[yg>0] = grid_stereo.eval(to_stereo(-xg[yg>0], yg[yg>0]))
         logger.info(
             f"Global mesh: reinject back stereographic gradient and recomputing gradient..."
         )
